@@ -1,11 +1,11 @@
 // LocalDrop signaling server. Files NEVER pass through here (they go browser-to-browser via WebRTC).
 // It only introduces devices on the same network (same public IP) or same room code.
 const http=require('http'),fs=require('fs'),path=require('path'),{WebSocketServer}=require('ws');
-const root=path.join(__dirname,'public'),types={'.html':'text/html; charset=utf-8','.json':'application/manifest+json','.js':'text/javascript','.png':'image/png'};
+const fs2=require('fs'),dir=fs2.existsSync(path.join(__dirname,'public','index.html'))?path.join(__dirname,'public'):__dirname;
+const ok=/^\/(index\.html|manifest\.json|sw\.js|icon-\d+\.png)$/,types={'.html':'text/html; charset=utf-8','.json':'application/manifest+json','.js':'text/javascript','.png':'image/png'};
 const srv=http.createServer((q,r)=>{let u=decodeURIComponent(q.url.split('?')[0]);if(u==='/')u='/index.html';
-  const f=path.normalize(path.join(root,u));
-  if(!f.startsWith(root))return r.writeHead(403).end();
-  fs.readFile(f,(e,d)=>{if(e)return r.writeHead(404).end('Not found');r.writeHead(200,{'Content-Type':types[path.extname(f)]||'application/octet-stream'});r.end(d)})});
+  if(!ok.test(u))return r.writeHead(404).end('Not found');
+  fs.readFile(path.join(dir,u),(e,d)=>{if(e)return r.writeHead(404).end('Not found: '+u+' is missing on the server');r.writeHead(200,{'Content-Type':types[path.extname(u)]});r.end(d)})});
 const wss=new WebSocketServer({server:srv,path:'/ws'});
 const rooms=new Map(),A=['Swift','Calm','Brave','Lucky','Cosmic','Silver'],N=['Fox','Owl','Panda','Otter','Hawk','Tiger'];
 const pick=a=>a[Math.floor(Math.random()*a.length)];
