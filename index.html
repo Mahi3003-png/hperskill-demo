@@ -17,30 +17,33 @@ main{width:min(460px,100%);padding:20px 16px}h1{margin:0 0 4px;font-size:24px}.s
 .drop{border:2px dashed var(--line);border-radius:16px;padding:16px;text-align:center;color:var(--mut);font-size:13px;margin-bottom:12px}.drop.on{border-color:var(--pri)}
 .hide{display:none}.lnk{color:var(--pri);cursor:pointer;font-size:12px;text-decoration:underline}
 </style></head><body><main>
-<section id="vP"><div style="font-size:40px">🔐</div><h1>Allow LocalDrop to access your files?</h1>
-<div class="sub">Files go straight between your devices. No account, no cloud, no tracking.</div>
-<button class="pm" data-p="limited"><b>1. Allow limited access</b><small>Only files you pick each time (recommended).</small></button>
-<button class="pm" data-p="full"><b>2. Allow full access</b><small>Pick files, or drag &amp; drop many files and folders.</small></button>
-<button class="pm" data-p="none"><b>3. Don’t allow</b><small>Receive only. Sending is turned off.</small></button></section>
-<section id="vH" class="hide"><h1>LocalDrop</h1><div class="sub"><span id="me">Connecting…</span> · <span id="pc" class="lnk">access: <span id="pl"></span></span></div>
-<div id="drop" class="drop hide">Drop files here, then tap a device</div>
+<section id="vH"><h1>LocalDrop</h1><div class="sub"><span id="me">Connecting…</span></div>
+<div id="drop" class="drop">Drop files here, then tap a device</div>
 <div class="card" id="inst"><b>Install LocalDrop</b><div class="sub" id="ih" style="margin:6px 0 8px"></div><button class="btn hide" id="ib">Install app</button></div>
 <h3 style="margin:8px 0">Connected devices</h3><div id="peers"></div>
-<div class="card"><div class="sub" style="margin:0 0 8px">Devices on the same Wi-Fi or hotspot appear automatically. On a different network? Use a shared room code.</div>
-<div class="row"><input id="rc" placeholder="Room code"><button class="btn" id="rj">Join</button></div></div>
+<div class="card"><b>Connect from another network</b>
+<div id="rIn"><div class="sub" style="margin:6px 0 10px">Devices on the same Wi-Fi or hotspot appear automatically. On a different network, create a room, then share the code or QR.</div>
+<button class="btn" id="rc2" style="width:100%">Create room code</button>
+<div class="row" style="margin-top:8px"><input id="rc" placeholder="Enter room code"><button class="btn" id="rj">Join</button></div></div>
+<div id="rOn" class="hide" style="text-align:center"><div class="sub" style="margin:8px 0 0">Room code</div><div id="rcode" style="font-size:30px;font-weight:800;letter-spacing:4px"></div>
+<img id="rqr" alt="QR code" width="180" height="180" style="background:#fff;padding:6px;border-radius:12px;margin:8px 0"><div class="sub">Other devices: scan this QR or enter the code.</div>
+<div class="row"><button class="btn" id="rcp" style="flex:1">Copy link</button><button class="btn" id="rlv" style="flex:1;background:var(--line);color:var(--tx)">Leave room</button></div></div></div>
 <div class="card speed"><div class="n" id="spd">0.0</div><div class="u">MB/s · <span id="mbps">0</span> Mbps</div></div>
 <div id="files"></div><input type="file" id="fi" multiple class="hide"></section></main>
 <script>
 const $=i=>document.getElementById(i),sig=(to,data)=>ws.send(JSON.stringify({type:'signal',to,data}));
-let perm=localStorage.getItem('perm'),ws,peers={},conns={},target=null,dropped=null;
-function setPerm(p){perm=p;localStorage.setItem('perm',p);$('vP').classList.add('hide');$('vH').classList.remove('hide');
- $('pl').textContent={limited:'limited',full:'full',none:'none (receive only)'}[p];$('drop').classList.toggle('hide',p!=='full');if(!ws)connect()}
-document.querySelectorAll('.pm').forEach(b=>b.onclick=()=>setPerm(b.dataset.p));
-$('pc').onclick=()=>{$('vH').classList.add('hide');$('vP').classList.remove('hide')};
-$('rj').onclick=()=>{const c=$('rc').value.trim();location.search=c?'?room='+encodeURIComponent(c):''};
+let perm='full',ws,peers={},conns={},target=null,dropped=null;
+$('rj').onclick=()=>{const c=$('rc').value.replace(/[^a-z0-9]/gi,'');location.search=c?'?room='+c:''};
+const AL='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+$('rc2').onclick=()=>{let c='';for(let i=0;i<6;i++)c+=AL[crypto.getRandomValues(new Uint8Array(1))[0]%AL.length];location.search='?room='+c};
+$('rlv').onclick=()=>{location.search=''};
+function roomUI(code){$('rIn').classList.toggle('hide',!!code);$('rOn').classList.toggle('hide',!code);
+ if(code){const link=location.origin+'/?room='+code;$('rcode').textContent=code.toUpperCase();$('rqr').src='/qr.svg?d='+encodeURIComponent(link);
+  $('rqr').onerror=()=>{$('rqr').style.display='none'};
+  $('rcp').onclick=async()=>{try{await navigator.clipboard.writeText(link);$('rcp').textContent='Copied ✓'}catch(e){prompt('Copy this link',link)}}}}
 function connect(){ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws'+location.search);
  ws.onmessage=e=>{const m=JSON.parse(e.data);
-  if(m.type==='hello')$('me').textContent='You are '+m.name;
+  if(m.type==='hello'){$('me').textContent='You are '+m.name;roomUI(m.room)}
   if(m.type==='peers'){peers=m.peers;render()}
   if(m.type==='signal')onSig(m)};
  ws.onclose=()=>setTimeout(connect,2000)}
@@ -50,11 +53,17 @@ function render(){const el=$('peers');el.innerHTML='';
   b.innerHTML='<span class="i"></span><span><b></b><small>Tap to send files</small></span><span class="st">Connected</span>';
   b.querySelector('.i').textContent=p.icon;b.querySelector('b').textContent=p.name;
   b.onclick=()=>{if(perm==='none'){alert('Sending is turned off. Change access to send.');return}
-   if(dropped){const f=dropped;dropped=null;send(p.id,f)}else{target=p.id;$('fi').click()}};el.appendChild(b)})}
-$('fi').onchange=e=>{if(e.target.files.length)send(target,[...e.target.files]);e.target.value=''};
-const d=$('drop');['dragover','dragenter'].forEach(v=>d.addEventListener(v,e=>{e.preventDefault();d.classList.add('on')}));
-d.addEventListener('dragleave',()=>d.classList.remove('on'));
-d.addEventListener('drop',e=>{e.preventDefault();d.classList.remove('on');dropped=[...e.dataTransfer.files];d.textContent=dropped.length+' file(s) ready: tap a device'});
+   if(dropped){const f=dropped;dropped=null;d.textContent=dd;send(p.id,f)}else{target=p.id;$('fi').click()}};el.appendChild(b)})}
+$('fi').onchange=e=>{const fs=[...e.target.files];e.target.value='';if(!fs.length)return;
+ if(target){const t=target;target=null;send(t,fs)}else{dropped=fs;d.textContent=fs.length+' file(s) ready: now tap a device below'}};
+const d=$('drop'),dd='Drop files here (or click to choose), then tap a device';d.textContent=dd;
+['dragenter','dragover','dragleave','drop'].forEach(v=>window.addEventListener(v,e=>e.preventDefault()));
+['dragenter','dragover'].forEach(v=>d.addEventListener(v,()=>d.classList.add('on')));
+['dragleave','drop'].forEach(v=>d.addEventListener(v,()=>d.classList.remove('on')));
+d.addEventListener('drop',e=>{const fs=[...e.dataTransfer.files].filter(f=>f.size>0||f.type);
+ if(!fs.length){d.textContent='No files found. Folders are not supported, please drop files.';return}
+ dropped=fs;d.textContent=fs.length+' file(s) ready: now tap a device below'});
+d.style.cursor='pointer';d.onclick=()=>{target=null;$('fi').click()};
 function mk(id){const pc=new RTCPeerConnection({iceServers:[]});pc.onicecandidate=e=>e.candidate&&sig(id,{c:e.candidate});conns[id]=pc;return pc}
 async function onSig({from,data}){const pc=conns[from]||mk(from);
  if(data.o){pc.ondatachannel=e=>recv(e.channel,from);await pc.setRemoteDescription(data.o);await pc.setLocalDescription(await pc.createAnswer());sig(from,{a:pc.localDescription})}
@@ -86,5 +95,5 @@ $('ib').onclick=async()=>{dp.prompt();await dp.userChoice;dp=null;$('ib').classL
 const ua=navigator.userAgent;$('inst').classList.toggle('hide',matchMedia('(display-mode: standalone)').matches||!!navigator.standalone);
 $('ih').textContent=/iPhone|iPad/.test(ua)?'Tap the Share button in Safari, then “Add to Home Screen”.':/Android/.test(ua)?'Tap “Install app” below, or the ⋮ menu, then “Install app”.':'Click “Install app” below, or the install icon in the address bar (Edge or Chrome).';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
-if(perm)setPerm(perm);
+connect();
 </script></body></html>

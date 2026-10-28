@@ -1,1 +1,1 @@
-{"name":"localdrop-web","version":"1.0.0","main":"server.js","scripts":{"start":"node server.js"},"dependencies":{"ws":"^8.18.0"}}
+{"name": "localdrop-web", "version": "1.0.0", "main": "server.js", "scripts": {"start": "node server.js"}, "dependencies": {"ws": "^8.18.0", "qrcode": "^1.5.4"}}
