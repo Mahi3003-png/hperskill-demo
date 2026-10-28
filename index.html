@@ -1,0 +1,90 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>LocalDrop</title>
+<link rel="manifest" href="/manifest.json"><link rel="apple-touch-icon" href="/icon-180.png"><meta name="theme-color" content="#2563eb"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="LocalDrop">
+<style>
+:root{--bg:#eef1f6;--card:#fff;--tx:#0f172a;--mut:#64748b;--pri:#2563eb;--pri2:#7c3aed;--ok:#16a34a;--line:#e2e8f0}
+@media(prefers-color-scheme:dark){:root{--bg:#0b1020;--card:#161d33;--tx:#e8ecf8;--mut:#93a0bd;--line:#26304d;color-scheme:dark}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;justify-content:center}
+main{width:min(460px,100%);padding:20px 16px}h1{margin:0 0 4px;font-size:24px}.sub{color:var(--mut);font-size:13px;margin-bottom:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
+.pm,.dev{display:flex;align-items:center;gap:12px;width:100%;text-align:left;border:1px solid var(--line);background:var(--card);color:var(--tx);border-radius:16px;padding:14px;margin-bottom:10px;cursor:pointer;font:inherit}
+.pm{display:block}.pm b{display:block}.pm small{color:var(--mut)}.pm:hover,.dev:hover{border-color:var(--pri)}.dev .i{font-size:28px}.dev small{color:var(--mut);display:block}
+.st{margin-left:auto;font-size:11px;font-weight:700;color:var(--ok);background:rgba(22,163,74,.15);padding:4px 9px;border-radius:99px}
+.speed{text-align:center}.n{font-size:44px;font-weight:800}.u{color:var(--mut);font-size:14px}
+.bar{height:8px;background:var(--line);border-radius:9px;overflow:hidden;margin-top:6px}.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--pri),var(--pri2))}
+.t{display:flex;justify-content:space-between;font-size:13px}input,.btn{font:inherit;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--tx)}
+.btn{background:var(--pri);color:#fff;border:0;cursor:pointer;font-weight:700}.row{display:flex;gap:8px}.row input{flex:1}
+.drop{border:2px dashed var(--line);border-radius:16px;padding:16px;text-align:center;color:var(--mut);font-size:13px;margin-bottom:12px}.drop.on{border-color:var(--pri)}
+.hide{display:none}.lnk{color:var(--pri);cursor:pointer;font-size:12px;text-decoration:underline}
+</style></head><body><main>
+<section id="vP"><div style="font-size:40px">🔐</div><h1>Allow LocalDrop to access your files?</h1>
+<div class="sub">Files go straight between your devices. No account, no cloud, no tracking.</div>
+<button class="pm" data-p="limited"><b>1. Allow limited access</b><small>Only files you pick each time (recommended).</small></button>
+<button class="pm" data-p="full"><b>2. Allow full access</b><small>Pick files, or drag &amp; drop many files and folders.</small></button>
+<button class="pm" data-p="none"><b>3. Don’t allow</b><small>Receive only. Sending is turned off.</small></button></section>
+<section id="vH" class="hide"><h1>LocalDrop</h1><div class="sub"><span id="me">Connecting…</span> · <span id="pc" class="lnk">access: <span id="pl"></span></span></div>
+<div id="drop" class="drop hide">Drop files here, then tap a device</div>
+<div class="card" id="inst"><b>Install LocalDrop</b><div class="sub" id="ih" style="margin:6px 0 8px"></div><button class="btn hide" id="ib">Install app</button></div>
+<h3 style="margin:8px 0">Connected devices</h3><div id="peers"></div>
+<div class="card"><div class="sub" style="margin:0 0 8px">Devices on the same Wi-Fi or hotspot appear automatically. On a different network? Use a shared room code.</div>
+<div class="row"><input id="rc" placeholder="Room code"><button class="btn" id="rj">Join</button></div></div>
+<div class="card speed"><div class="n" id="spd">0.0</div><div class="u">MB/s · <span id="mbps">0</span> Mbps</div></div>
+<div id="files"></div><input type="file" id="fi" multiple class="hide"></section></main>
+<script>
+const $=i=>document.getElementById(i),sig=(to,data)=>ws.send(JSON.stringify({type:'signal',to,data}));
+let perm=localStorage.getItem('perm'),ws,peers={},conns={},target=null,dropped=null;
+function setPerm(p){perm=p;localStorage.setItem('perm',p);$('vP').classList.add('hide');$('vH').classList.remove('hide');
+ $('pl').textContent={limited:'limited',full:'full',none:'none (receive only)'}[p];$('drop').classList.toggle('hide',p!=='full');if(!ws)connect()}
+document.querySelectorAll('.pm').forEach(b=>b.onclick=()=>setPerm(b.dataset.p));
+$('pc').onclick=()=>{$('vH').classList.add('hide');$('vP').classList.remove('hide')};
+$('rj').onclick=()=>{const c=$('rc').value.trim();location.search=c?'?room='+encodeURIComponent(c):''};
+function connect(){ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws'+location.search);
+ ws.onmessage=e=>{const m=JSON.parse(e.data);
+  if(m.type==='hello')$('me').textContent='You are '+m.name;
+  if(m.type==='peers'){peers=m.peers;render()}
+  if(m.type==='signal')onSig(m)};
+ ws.onclose=()=>setTimeout(connect,2000)}
+function render(){const el=$('peers');el.innerHTML='';
+ if(!peers.length){el.innerHTML='<div class="sub">No other devices yet. Open this site on another device on the same Wi-Fi.</div>';return}
+ peers.forEach(p=>{const b=document.createElement('button');b.className='dev';
+  b.innerHTML='<span class="i"></span><span><b></b><small>Tap to send files</small></span><span class="st">Connected</span>';
+  b.querySelector('.i').textContent=p.icon;b.querySelector('b').textContent=p.name;
+  b.onclick=()=>{if(perm==='none'){alert('Sending is turned off. Change access to send.');return}
+   if(dropped){const f=dropped;dropped=null;send(p.id,f)}else{target=p.id;$('fi').click()}};el.appendChild(b)})}
+$('fi').onchange=e=>{if(e.target.files.length)send(target,[...e.target.files]);e.target.value=''};
+const d=$('drop');['dragover','dragenter'].forEach(v=>d.addEventListener(v,e=>{e.preventDefault();d.classList.add('on')}));
+d.addEventListener('dragleave',()=>d.classList.remove('on'));
+d.addEventListener('drop',e=>{e.preventDefault();d.classList.remove('on');dropped=[...e.dataTransfer.files];d.textContent=dropped.length+' file(s) ready: tap a device'});
+function mk(id){const pc=new RTCPeerConnection({iceServers:[]});pc.onicecandidate=e=>e.candidate&&sig(id,{c:e.candidate});conns[id]=pc;return pc}
+async function onSig({from,data}){const pc=conns[from]||mk(from);
+ if(data.o){pc.ondatachannel=e=>recv(e.channel,from);await pc.setRemoteDescription(data.o);await pc.setLocalDescription(await pc.createAnswer());sig(from,{a:pc.localDescription})}
+ if(data.a)await pc.setRemoteDescription(data.a);
+ if(data.c)try{await pc.addIceCandidate(data.c)}catch{}}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function send(id,files){const pc=mk(id),dc=pc.createDataChannel('f');dc.binaryType='arraybuffer';
+ await pc.setLocalDescription(await pc.createOffer());sig(id,{o:pc.localDescription});
+ await new Promise((r,j)=>{dc.onopen=r;setTimeout(()=>j(),20000)}).catch(()=>{alert('Could not connect. Make sure both devices are on the same network.');return});
+ if(dc.readyState!=='open')return;
+ for(const f of files){dc.send(JSON.stringify({name:f.name,size:f.size,type:f.type}));const row=addRow('⬆ '+f.name,f.size);let off=0;
+  while(off<f.size){if(dc.bufferedAmount>8e6){dc.bufferedAmountLowThreshold=2e6;await new Promise(r=>dc.onbufferedamountlow=r)}
+   const b=await f.slice(off,off+65536).arrayBuffer();dc.send(b);off+=b.byteLength;row.upd(off)}
+  dc.send('END');row.upd(f.size)}
+ while(dc.bufferedAmount>0)await sleep(50);await sleep(500);dc.close();pc.close();delete conns[id]}
+function recv(dc,from){dc.binaryType='arraybuffer';let cur=null,ok=null;const who=(peers.find(p=>p.id===from)||{}).name||'A device';
+ dc.onmessage=e=>{if(typeof e.data==='string'){
+   if(e.data==='END'){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(cur.parts,{type:cur.type}));a.download=cur.name;a.click();cur.row.upd(cur.size);cur=null;return}
+   const h=JSON.parse(e.data);if(ok===null)ok=confirm(who+' wants to send you files. Accept?');if(!ok){dc.close();return}
+   cur={...h,parts:[],got:0,row:addRow('⬇ '+h.name,h.size)}}
+  else if(cur){cur.parts.push(e.data);cur.got+=e.data.byteLength;cur.row.upd(cur.got)}}}
+function addRow(t,size){const el=document.createElement('div');el.className='card';
+ el.innerHTML='<div class="t"><span class="nm"></span><span class="pc">0%</span></div><div class="bar"><i></i></div>';el.querySelector('.nm').textContent=t;$('files').prepend(el);
+ let lt=performance.now(),lb=0;return{upd(b){const n=performance.now();
+  if(n-lt>400||b>=size){const s=(b-lb)/1048576/((n-lt)/1000);if(b<size){$('spd').textContent=s.toFixed(1);$('mbps').textContent=Math.round(s*8)}lt=n;lb=b}
+  const p=size?Math.round(b/size*100):100;el.querySelector('i').style.width=p+'%';el.querySelector('.pc').textContent=p+'%'}}}
+let dp;addEventListener('beforeinstallprompt',e=>{e.preventDefault();dp=e;$('ib').classList.remove('hide')});
+$('ib').onclick=async()=>{dp.prompt();await dp.userChoice;dp=null;$('ib').classList.add('hide')};
+const ua=navigator.userAgent;$('inst').classList.toggle('hide',matchMedia('(display-mode: standalone)').matches||!!navigator.standalone);
+$('ih').textContent=/iPhone|iPad/.test(ua)?'Tap the Share button in Safari, then “Add to Home Screen”.':/Android/.test(ua)?'Tap “Install app” below, or the ⋮ menu, then “Install app”.':'Click “Install app” below, or the install icon in the address bar (Edge or Chrome).';
+if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
+if(perm)setPerm(perm);
+</script></body></html>
